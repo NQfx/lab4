@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier
+
 from sklearn.metrics import (
     roc_auc_score,
     accuracy_score,
@@ -55,47 +56,37 @@ def make_base_models(random_seed=42):
             n_estimators=500,
             max_depth=10,
             min_samples_leaf=3,
-            max_features="sqrt",
             n_jobs=-1,
             random_state=random_seed,
         ),
-        ExtraTreesClassifier(
-            n_estimators=500,
-            max_depth=10,
-            min_samples_leaf=3,
-            max_features="sqrt",
-            n_jobs=-1,
+        LogisticRegression(
+            max_iter=1000,
             random_state=random_seed,
         ),
     ]
-
 
 def run_ensemble_experiment(data: EnsembleInput) -> EnsembleResult:
     train_features = np.asarray(data.train_features)
     train_target = np.asarray(data.train_target)
     test_features = np.asarray(data.test_features)
     test_target = np.asarray(data.test_target)
-
     folds = make_folds(
         train_features, train_target, n_splits=5, random_state=data.random_seed
     )
     oof = build_meta_features(
         train_features, train_target, folds, random_seed=data.random_seed
     )
-
     meta_model = train_meta_model(oof, train_target, random_seed=data.random_seed)
-
     base_models = train_base_models(
         train_features, train_target, random_seed=data.random_seed
     )
-
     test_meta = np.column_stack(
         [model.predict_proba(test_features)[:, 1] for model in base_models]
     )
     probabilities = meta_model.predict_proba(test_meta)[:, 1]
     predictions = (probabilities >= 0.5).astype(int)
     return EnsembleResult(
-        model_name="Stacking lv0: GB+RF+ET lv1: LogReg)",
+        model_name="Stacking GB+RF+LR -> LogReg)",
         probabilities=probabilities,
         predictions=predictions,
         roc_auc=float(roc_auc_score(test_target, probabilities)),
@@ -104,3 +95,12 @@ def run_ensemble_experiment(data: EnsembleInput) -> EnsembleResult:
         recall=float(recall_score(test_target, predictions)),
         f1=float(f1_score(test_target, predictions)),
     )
+
+def print_ensemble_result(result: EnsembleResult):
+    print(f"Model: {result.model_name}")
+    print(f"ROC AUC : {result.roc_auc:.4f}")
+    print(f"Accuracy: {result.accuracy:.4f}")
+    print(f"Precision: {result.precision:.4f}")
+    print(f"Recall  : {result.recall:.4f}")
+    print(f"F1      : {result.f1:.4f}")
+
